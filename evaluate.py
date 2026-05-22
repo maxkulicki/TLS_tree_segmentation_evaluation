@@ -15,6 +15,9 @@ Optional field:
     When present, only trees with completely_inside == 1 are evaluated
     unless --all-trees is set.
 
+Detection rate is reported as the fraction of ground-truth trees whose
+Hungarian-matched prediction achieves IoU >= 0.5. 
+
 Usage:
     python evaluate.py input.laz
     python evaluate.py input.laz --voxel-size 0.05
@@ -27,6 +30,12 @@ import numpy as np
 import pandas as pd
 import laspy
 from scipy.optimize import linear_sum_assignment
+
+
+# Detection rate threshold. Fixed at 0.5 to match Eq. 3 in the paper:
+# a ground-truth tree counts as detected iff its matched prediction
+# achieves IoU >= DETECTION_IOU_THRESHOLD.
+DETECTION_IOU_THRESHOLD = 0.5
 
 
 # ── Voxelization ─────────────────────────────────────────────────────────────
@@ -70,7 +79,8 @@ def compute_iou(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def match_instances(gt: dict, pred: dict) -> dict:
-    """Hungarian matching maximizing IoU. Returns {gt_id: pred_id}."""
+    """Hungarian matching maximizing IoU. Returns {gt_id: pred_id}.
+    """
     gt_ids = list(gt)
     pred_ids = list(pred)
     if not gt_ids or not pred_ids:
@@ -188,9 +198,11 @@ def main():
 
     # ── Summary ──
     n = len(df)
-    matched = (df["matched_predID"] != -1).sum()
+    detected = int((df["iou"] >= DETECTION_IOU_THRESHOLD).sum())
     print(f"\nTrees evaluated:  {n}")
-    print(f"Detection rate:   {matched}/{n} ({matched/n:.3f})" if n > 0 else "")
+    if n > 0:
+        print(f"Detection rate (IoU >= {DETECTION_IOU_THRESHOLD}):   "
+              f"{detected}/{n} ({detected/n:.3f})")
     print(f"Mean IoU:         {df['iou'].mean():.3f}")
     print(f"Mean Precision:   {df['precision'].mean():.3f}")
     print(f"Mean Recall:      {df['recall'].mean():.3f}")
