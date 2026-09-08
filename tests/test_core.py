@@ -207,29 +207,7 @@ def test_config_header_round_trips(tmp_path):
     assert back == cfg and len(df) == 1
 
 
-# ── demo, transfer, batch ────────────────────────────────────────────────────
-
-def test_demo_plot_is_reproducible_and_well_formed():
-    from tlseval.demo import make_plot
-    a = make_plot(n_trees=12, seed=7)
-    b = make_plot(n_trees=12, seed=7)
-    for x, y in zip(a, b):
-        assert np.array_equal(x, y), "same seed must give the same plot"
-    xyz, tree, inside = a
-    assert len(xyz) == len(tree) == len(inside)
-    assert (tree == 0).any(), "a plot needs ground points"
-    # Every flagged-inside point belongs to a tree, never to the ground.
-    assert not (inside[tree == 0] == 1).any()
-
-
-def test_naive_baseline_produces_a_partition():
-    from tlseval.demo import make_plot, naive_segment
-    xyz, _, _ = make_plot(n_trees=10, seed=3)
-    pred = naive_segment(xyz)
-    assert pred.shape == (len(xyz),)
-    assert pred.min() >= 0
-    assert (pred > 0).any(), "the baseline should find something"
-
+# ── transfer and batch ────────────────────────────────────────────────────
 
 def test_transfer_moves_labels_onto_reference_points(tmp_path):
     from tlseval.transfer import transfer_labels, transfer_report

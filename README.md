@@ -11,7 +11,7 @@ matching, classifies each reference tree's failure as **Missed**, **Split** or
 
 ```bash
 pip install -e ".[report]"
-tlseval demo          # synthetic plot, built-in baseline, full loop, no download
+tlseval score plot.laz
 ```
 
 New here? Start with the [tutorial](docs/TUTORIAL.md).
@@ -22,7 +22,6 @@ New here? Start with the [tutorial](docs/TUTORIAL.md).
 
 | | |
 |---|---|
-| `tlseval demo` | generate a synthetic plot and score it end to end |
 | `tlseval score plot.laz` | score one plot |
 | `tlseval batch preds/ -r reference/ -j 8` | score a directory, in parallel |
 | `tlseval transfer pred.laz ref.laz -o merged.laz` | move labels onto the reference points |

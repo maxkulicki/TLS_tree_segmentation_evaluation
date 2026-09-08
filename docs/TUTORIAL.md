@@ -1,60 +1,35 @@
 # Tutorial
 
-From a fresh clone to a scored, analysed result. The first section needs no
-download and takes under a minute.
+From a fresh clone to a scored, analysed result on the benchmark data.
 
 ---
 
-## 1. Install and prove it works
+## 1. Install
 
 ```bash
 git clone https://github.com/maxkulicki/TLS_tree_segmentation_evaluation
 cd TLS_tree_segmentation_evaluation
 pip install -e ".[report]"
+tlseval --version
 ```
 
 `[report]` adds matplotlib for the figures. Without it everything still runs and
 the tables are still written; only the plots are skipped.
 
-Then:
+## 2. Get the data
 
-```bash
-tlseval demo
-```
+The benchmark dataset is published separately — 272 plots of Central European
+forest, manually segmented, voxelised at 2 cm. Link and DOI in
+[`../LEADERBOARD.md`](../LEADERBOARD.md).
 
-This generates a synthetic plot, runs a small built-in baseline segmenter on it,
-and scores the result:
+Every cloud carries `treeID` (the reference instance, 0 = unlabelled) and
+`completelyInside` (1 = the tree lies fully within the plot). Run your method on
+the clouds as distributed: inference happens at 2 cm, and only the scoring
+quantises to 10 cm.
 
-```
-synthetic plot -> demo/plot.laz
-  79,002 points, 24 reference trees (18 fully inside the plot)
-  naive baseline produced 19 instances
+You need one plot to follow the next section, not all 272.
 
-voxel size        0.1 m
-trees evaluated   18   (6 boundary-clipped excluded via 'completelyInside')
-pred. instances   19
-mean IoU          0.507
-detection rate    0.556   [IoU >= 0.5]
-mean precision    0.562
-mean recall       0.640
-
-failure events per 100 reference trees:
-  missed 0.0   split 0.0   merged 27.8
-```
-
-Read that last line before moving on. The baseline finds stems in a slice above
-the ground, so it never *loses* a tree (Missed 0.0) and never *fragments* one
-(Split 0.0) — but it fuses understorey trees into the dominant crown above them
-(Merged 27.8). Two methods can reach the same mean IoU by opposite routes, and
-the taxonomy is the only place that difference shows up.
-
-The baseline lives in `tlseval/demo.py` and is about 40 lines. It is a reasonable
-starting point if you want to see the shape of a segmenter that this tool can
-score.
-
----
-
-## 2. Score one of your own plots
+## 3. Score one plot
 
 The scorer reads **one file** containing both labels on **the same points**:
 
@@ -109,7 +84,7 @@ tlseval score merged.laz
 
 ---
 
-## 3. Run the whole benchmark
+## 4. Run the whole benchmark
 
 Download the dataset, then:
 
@@ -177,7 +152,7 @@ unless you know why you are changing it.
 
 ---
 
-## 4. Analyse the result
+## 5. Analyse the result
 
 Scoring tells you how well a method did. The report tells you *where* and *why*.
 
@@ -211,7 +186,7 @@ tree's measurements — without changing any value you would think to check.
 
 ---
 
-## 5. Submit to the leaderboard
+## 6. Submit to the leaderboard
 
 See [`../LEADERBOARD.md`](../LEADERBOARD.md). In short: run `tlseval batch` at the
 default voxel size, open a pull request adding your row and the `summary.csv`

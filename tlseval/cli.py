@@ -3,7 +3,6 @@
 import argparse
 import json
 import sys
-from pathlib import Path
 
 from . import __version__
 from .core import (DEFAULTS, DETECTION_IOU_THRESHOLD, TlsEvalError, config_from,
@@ -71,10 +70,6 @@ def build_parser():
 
     c = sub.add_parser("check", help="compare the config headers of result files")
     c.add_argument("files", nargs="+")
-
-    d = sub.add_parser("demo", help="generate a synthetic plot and score it end to end")
-    d.add_argument("--out", "-o", default="demo", help="output directory")
-    d.add_argument("--trees", type=int, default=24)
     return ap
 
 
@@ -178,35 +173,10 @@ def cmd_check(a):
     return 0
 
 
-def cmd_demo(a):
-    """No download, no configuration: prove the install works and show the shape
-    of a real run."""
-    from .demo import build as build_demo
-    path, info = build_demo(a.out, n_trees=a.trees)
-    print(f"synthetic plot -> {path}")
-    print(f"  {info['points']:,} points, {info['reference_trees']} reference trees "
-          f"({info['completely_inside']} fully inside the plot)")
-    print(f"  naive baseline produced {info['predicted_instances']} instances\n")
-
-    class _A:
-        input, output = path, str(Path(a.out) / "results.csv")
-        voxel_size = DEFAULTS["voxel_size"]
-        gt_field, pred_field = DEFAULTS["gt_field"], DEFAULTS["pred_field"]
-        all_trees = False
-        dominance_threshold = DEFAULTS["dominance_threshold"]
-        fragment_threshold = DEFAULTS["fragment_threshold"]
-    rc = cmd_score(_A)
-    print("\nThat is the whole loop. To run it on your own data:\n"
-          "  tlseval score  your_plot.laz          # one plot\n"
-          "  tlseval batch  predictions/ -r reference/ -j 8\n"
-          "  tlseval report results/ -a plot_attributes.csv")
-    return rc
-
-
 def main(argv=None):
     a = build_parser().parse_args(argv)
     cmds = {"score": cmd_score, "batch": cmd_batch, "transfer": cmd_transfer,
-            "report": cmd_report, "check": cmd_check, "demo": cmd_demo}
+            "report": cmd_report, "check": cmd_check}
     try:
         return cmds[a.cmd](a)
     except TlsEvalError as exc:
