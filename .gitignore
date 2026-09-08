@@ -1,3 +1,15 @@
 __pycache__/
-*.pyc
-evaluation_results.csv
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# outputs
+results/
+report/
+*.laz
+*.las
+!tests/data/*.laz

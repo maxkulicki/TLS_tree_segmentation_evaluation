@@ -1,145 +1,176 @@
-# Tree Instance Segmentation Evaluation
+# TLS Tree Segmentation Evaluation
 
-Voxel-based evaluation of tree instance segmentation from point clouds.
+Evaluation and analysis for individual-tree instance segmentation from
+terrestrial laser scanning, and the reference implementation for the
+TreeScanPL10K benchmark.
 
-Given a point cloud with ground truth (`treeID`) and predicted (`predID`) instance labels, the script computes per-tree **IoU**, **precision**, and **recall** using Hungarian matching, and classifies each reference tree's failure mode as **Missed**, **Split**, or **Merged**.
+Given a point cloud with reference (`treeID`) and predicted (`predID`) instance
+labels, it computes per-tree **IoU**, **precision** and **recall** by Hungarian
+matching, classifies each reference tree's failure as **Missed**, **Split** or
+**Merged**, and reports which forest attributes drive the result.
 
-## Method
+```bash
+pip install -e ".[report]"
+tlseval demo          # synthetic plot, built-in baseline, full loop, no download
+```
 
-1. **Voxelization** — Points are discretized into a regular 3D grid (default 0.1 m). Each voxel is encoded as a single 64-bit integer for fast set operations.
-2. **Hungarian matching** — Ground truth and predicted instances are matched one-to-one by maximizing IoU using the Hungarian algorithm (`scipy.optimize.linear_sum_assignment`).
-3. **Per-tree metrics** — For each matched pair, intersection-over-union, precision, and recall are computed over voxel sets. Unmatched ground truth trees receive scores of zero.
-4. **Failure taxonomy** — Each reference tree is additionally classified by *how* it went wrong, independently of the IoU value.
+New here? Start with the [tutorial](docs/TUTORIAL.md).
+
+---
+
+## Commands
+
+| | |
+|---|---|
+| `tlseval demo` | generate a synthetic plot and score it end to end |
+| `tlseval score plot.laz` | score one plot |
+| `tlseval batch preds/ -r reference/ -j 8` | score a directory, in parallel |
+| `tlseval transfer pred.laz ref.laz -o merged.laz` | move labels onto the reference points |
+| `tlseval report results/ -a attributes.csv` | correlations, stratification, figures |
+| `tlseval check a.csv b.csv` | are two result files comparable? |
+
+Or as a library:
+
+```python
+from tlseval import evaluate, summarise
+df = evaluate("plot.laz")          # one row per reference tree
+print(summarise(df)["mean_iou"])
+```
+
+---
+
+## Two things that will silently corrupt a comparison
+
+**Voxel size changes IoU by more than the gap between methods.** On this dataset
+a 2 cm grid scores 0.01–0.03 higher than 10 cm, enough to reorder adjacent
+methods. Every run therefore stamps its settings into the first line of its
+output:
+
+```
+# evaluation_config {"all_trees": false, "dominance_threshold": 0.5,
+                     "fragment_threshold": 0.1, "gt_field": "treeID",
+                     "pred_field": "predID", "voxel_size": 0.1}
+```
+
+`tlseval check` compares those headers and refuses mismatched files. **The
+benchmark grid is 0.1 m** — inference runs on the 2 cm clouds as distributed,
+and only the scoring quantises to 10 cm.
+
+**Predictions must sit on the same points as the reference.** Most pipelines
+downsample, drop ground, or reorder, and scoring that output directly builds the
+two voxel sets from different points. `tlseval transfer` does the
+nearest-neighbour step once, correctly; `--dry-run` reports what fraction of
+reference points actually received a label before you commit to it.
+
+A third rule follows from the same concern: **tree attributes are read from the
+point cloud, never joined from a side table by tree ID.** Annotation passes
+renumber trees, so a tree-ID join risks pairing one tree's score with another
+tree's measurements — silently, and without affecting any value you would think
+to check.
+
+---
+
+## Metrics
+
+**Mean IoU** averages over *every* evaluated reference tree, unmatched trees
+contributing zero. Averaging over matched trees only answers a different
+question — how well *found* trees are delineated — and runs 0.02–0.08 higher
+depending on how often the method fails to match at all. The two are not
+interchangeable and should never share a column.
+
+**Detection rate** is the fraction of reference trees whose match reaches
+IoU ≥ 0.5, following the convention in the literature. Counting merely-matched
+trees inflates this badly: Hungarian matching pairs a tree with its best
+available prediction however poor.
+
+**Precision and recall** are point-wise over matched pairs.
 
 ### Failure taxonomy
 
-Let `c(i, j)` be the share of reference tree *i*'s points falling in prediction *j*, with `j = 0` denoting background. A prediction is **dominant** for tree *i* when `c(i, j) > T`. With a dominance threshold `T` (default 0.5) and a fragment threshold `S` (default 0.1):
+Let `c(i, j)` be the share of reference tree *i*'s points falling in prediction
+*j*, with `j = 0` meaning background. A prediction is **dominant** for tree *i*
+when `c(i, j) > T`. With dominance threshold `T` (0.5) and fragment threshold `S`
+(0.1):
 
 | Event | Condition | Reading |
 |---|---|---|
-| **Missed** | `c(i, 0) > T` | Most of the tree was left as background |
-| **Split** | some `j` with `c(i, j) > S` is dominant for no tree | A fragment leaked into a prediction representing no real tree |
-| **Merged** | the tree's dominant prediction is also dominant for a *taller* tree | The tree was absorbed into a larger neighbour |
+| **Missed** | `c(i, 0) > T` | most of the tree was left as background |
+| **Split** | some `j` with `c(i, j) > S` is dominant for no tree | a fragment leaked into a prediction representing no real tree |
+| **Merged** | the tree's dominant prediction also dominates a *taller* tree | the tree was absorbed into a larger neighbour |
 
-The three flags are computed independently, so one tree may carry more than one. Shares are computed on **points**, not voxels, so unlike IoU the taxonomy is unaffected by voxel size.
+Flags are independent, so one tree may carry more than one. Shares are computed
+on **points**, not voxels, so unlike IoU the taxonomy does not move with voxel
+size.
 
-These events distinguish methods that reach the same IoU by different routes: a method that fragments trees and one that fuses them can score alike while failing an inventory in opposite directions.
+This is what separates methods that reach the same IoU by opposite routes. A
+method that fragments crowns and one that fuses them can score alike while
+failing an inventory in opposite directions.
 
-### `completely_inside` filter
+### Boundary trees
 
-If the input file contains a `completely_inside` field (binary, 1 = tree fully within plot boundary), only those trees are evaluated by default. This avoids penalizing methods for partial trees at plot edges. Use `--all-trees` to override.
+If the cloud carries `completelyInside` or `completely_inside`, only flagged
+trees are scored. Trees clipped by the plot edge are incomplete in the reference
+itself, so scoring them penalises a method for points that were never in the
+file. `--all-trees` overrides this.
 
-## Comparing results
+---
 
-**Voxel size changes IoU by more than the gap between methods.** On TreeScanPL10K, the same predictions scored 0.01–0.03 higher on a 2 cm grid than on a 10 cm grid — enough to reorder adjacent methods. Numbers produced at different voxel sizes are not comparable, and nothing about the output makes that visible on its own.
+## Input and output
 
-Every run therefore writes its settings into the first line of the output CSV:
-
-```
-# evaluation_config {"all_trees": false, "dominance_threshold": 0.5, "fragment_threshold": 0.1,
-                     "gt_field": "treeID", "pred_field": "predID", "voxel_size": 0.1}
-```
-
-Before comparing two result files, check that these headers match. `read_results()` returns the parsed config alongside the DataFrame:
-
-```python
-from evaluate import read_results
-df, config = read_results("results.csv")
-```
-
-A second rule follows from the same concern: **tree attributes are read from the point cloud, never joined from a side table by tree ID.** Annotation passes renumber trees, so joining a separate attribute table risks pairing one tree's score with another tree's measurements — silently, and without affecting any value you would think to check.
-
-## Requirements
-
-```
-numpy
-pandas
-laspy
-scipy
-```
-
-## Usage
-
-```bash
-# Basic evaluation
-python evaluate.py plot.laz
-
-# Custom voxel size
-python evaluate.py plot.laz --voxel-size 0.05
-
-# Evaluate all trees (ignore boundary filter)
-python evaluate.py plot.laz --all-trees
-
-# Custom field names and output path
-python evaluate.py plot.laz --gt-field treeID --pred-field my_pred --output results.csv
-
-# Adjust the failure-taxonomy thresholds
-python evaluate.py plot.laz --dominance-threshold 0.5 --fragment-threshold 0.1
-```
-
-Example output:
-
-```
-Voxel size:       0.02 m
-Trees evaluated:  50
-Pred. instances:  59
-Detection rate:   26/50 (0.520)   [IoU >= 0.5]
-Matched (any IoU):43/50 (0.860)
-Mean IoU:         0.480
-Mean Precision:   0.565
-Mean Recall:      0.704
-
-Failure events (per 100 reference trees):
-  Missed:         2.0
-  Split:          14.0
-  Merged:         18.0
-```
-
-## Evaluating your own method
-
-1. Run your segmentation on the reference cloud.
-2. Write the predicted instance labels back onto **the same points**, as a new field.
-3. Run `evaluate.py` with `--pred-field <your field>` and the same `--voxel-size` used for the results you are comparing against.
-
-The prediction must be point-for-point aligned with the ground truth cloud. If your pipeline resamples or reorders points, transfer the labels back by nearest neighbour before evaluating — otherwise the voxel sets are built from different points and every metric is affected.
-
-## Input format
-
-A single LAS/LAZ file with the following point attributes:
+**Input** — one LAS/LAZ file per plot:
 
 | Field | Type | Description |
 |---|---|---|
-| `treeID` | integer | Ground truth instance label (0 = unlabeled) |
-| `predID` | integer | Predicted instance label (0 = unlabeled) |
-| `completely_inside` | integer (optional) | 1 if tree is fully within the plot boundary |
+| `treeID` | integer | reference instance label (0 = unlabelled) |
+| `predID` | integer | predicted instance label (0 = unlabelled) |
+| `completelyInside` | integer | optional; 1 = tree fully within the plot |
 
-If your predictions are in a separate file, merge them into the ground truth file first (e.g. by aligning coordinates and adding the `predID` field).
+**Output** — CSV with one row per evaluated tree: `treeID`, `matched_predID`,
+`iou`, `precision`, `recall`, `gt_voxel_count`, `pred_voxel_count`, `missed`,
+`split`, `merged`. `tlseval batch` additionally writes per-plot and whole-run
+tables.
 
-## Output
+```python
+from tlseval import read_results
+df, config = read_results("results.csv")     # config comes back with the data
+```
 
-A CSV with one row per evaluated tree:
+---
 
-| Column | Description |
-|---|---|
-| `treeID` | Ground truth tree ID |
-| `matched_predID` | Matched prediction ID (-1 if unmatched) |
-| `iou` | Intersection over Union |
-| `precision` | Fraction of predicted voxels that overlap GT |
-| `recall` | Fraction of GT voxels that overlap prediction |
-| `gt_voxel_count` | Number of unique GT voxels |
-| `pred_voxel_count` | Number of unique predicted voxels |
-| `missed` | 1 if most of the tree was left as background |
-| `split` | 1 if a fragment leaked into a prediction representing no tree |
-| `merged` | 1 if the tree was absorbed into a taller neighbour |
+## Data and leaderboard
 
-The first line of the file is the `# evaluation_config` header described under [Comparing results](#comparing-results). `pandas.read_csv(path, skiprows=1)` reads the table directly, or use `read_results()` to get the config with it.
+The benchmark dataset — 272 plots of Central European forest, manually
+segmented, voxelised at 2 cm — is published separately; see
+[`LEADERBOARD.md`](LEADERBOARD.md) for the link, current standings, and how to
+add a method.
 
-The script also prints summary statistics (mean IoU, precision, recall, detection rate, and failure-event rates) to stdout.
+Predictions from the six methods in the paper are not distributed. This
+repository is for running the evaluation yourself, on your own method, against
+the same reference data and the same metric.
+
+---
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+The tests use synthetic fixtures whose correct answers are derived by hand in
+the comments, rather than pinned to whatever the code currently returns.
+
+## Requirements
+
+Python ≥ 3.9, `numpy`, `pandas`, `laspy[lazrs]`, `scipy`. `matplotlib` for
+report figures.
 
 ## Citation
-
-If you use this evaluation in your work, please cite:
 
 ```
 TODO
 ```
+
+## License
+
+See [LICENSE](LICENSE).
