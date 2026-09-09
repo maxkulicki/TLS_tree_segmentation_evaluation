@@ -61,7 +61,11 @@ def build_parser():
     r = sub.add_parser("report", help="full analysis of a batch run")
     r.add_argument("results", help="directory written by `tlseval batch`")
     r.add_argument("--attributes", "-a", default=None,
-                   help="CSV of per-plot attributes, joined on plot name")
+                   help="CSV of per-plot attributes, joined on plot name "
+                        "(data/treescanpl_plot_attributes.csv for TreeScanPL)")
+    r.add_argument("--published", "-p", default=None,
+                   help="CSV of published per-plot results to compare against "
+                        "(data/treescanpl_published_results.csv)")
     r.add_argument("--out", "-o", default="report")
     r.add_argument("--strip-suffix", default=None,
                    help="trailing text to remove from plot names before joining "
@@ -94,9 +98,10 @@ def cmd_score(a):
     if field is None and not a.all_trees:
         print("                  (no boundary flag in this file; all trees scored)")
     print(f"pred. instances   {s['n_pred_instances']}")
-    print(f"mean IoU          {s['mean_iou']:.3f}")
+    print(f"mean IoU          {s['mean_iou_matched']:.3f}   "
+          f"({s['n_matched']}/{s['n_trees']} matched trees)")
+    print(f"                  {s['mean_iou_all']:.3f}   (all trees, unmatched = 0)")
     print(f"detection rate    {s['detection_rate']:.3f}   [IoU >= {DETECTION_IOU_THRESHOLD}]")
-    print(f"matched (any IoU) {s['matched_rate']:.3f}")
     print(f"mean precision    {s['mean_precision']:.3f}")
     print(f"mean recall       {s['mean_recall']:.3f}")
     print("\nfailure events per 100 reference trees:")
@@ -140,8 +145,8 @@ def cmd_transfer(a):
 
 def cmd_report(a):
     from .report import build
-    build(a.results, attributes=a.attributes, out_dir=a.out,
-          figures=not a.no_figures, strip_suffix=a.strip_suffix)
+    build(a.results, attributes=a.attributes, published=a.published,
+          out_dir=a.out, figures=not a.no_figures, strip_suffix=a.strip_suffix)
     return 0
 
 
