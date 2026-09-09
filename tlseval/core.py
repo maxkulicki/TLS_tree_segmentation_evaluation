@@ -341,22 +341,34 @@ def read_results(path: str):
 def summarise(df: "pd.DataFrame") -> dict:
     """Plot-level summary of a per-tree results table.
 
-    mIoU, precision and recall are means over every evaluated reference tree,
-    with unmatched trees contributing zero -- the convention the detection rate
-    already uses. Averaging over matched trees only answers a different question
-    ("how well are found trees delineated") and is not interchangeable with this.
+    Mean IoU is reported two ways because the choice changes the number by
+    0.02-0.08 and the two are not interchangeable:
+
+      mean_iou_matched  averages over reference trees that got a match.
+                        "How well are found trees delineated?" This is the
+                        convention behind the published TreeScanPL10K table,
+                        so it is what reproduces those numbers.
+
+      mean_iou_all      averages over every evaluated tree, unmatched ones
+                        contributing zero. "How well is the plot segmented?"
+                        This is the convention the detection rate already uses.
+
+    Precision and recall are over matched pairs, matching how they are defined.
     """
     n = len(df)
     if n == 0:
         return {}
+    matched = df[df["iou"] > 0]
     return {
         "n_trees": n,
+        "n_matched": len(matched),
         "n_pred_instances": df.attrs.get("n_pred_instances"),
-        "mean_iou": df["iou"].mean(),
+        "mean_iou_matched": matched["iou"].mean() if len(matched) else 0.0,
+        "mean_iou_all": df["iou"].mean(),
         "detection_rate": (df["iou"] >= DETECTION_IOU_THRESHOLD).mean(),
         "matched_rate": (df["matched_predID"] != -1).mean(),
-        "mean_precision": df["precision"].mean(),
-        "mean_recall": df["recall"].mean(),
+        "mean_precision": matched["precision"].mean() if len(matched) else 0.0,
+        "mean_recall": matched["recall"].mean() if len(matched) else 0.0,
         "missed_per100": 100 * df["missed"].mean(),
         "split_per100": 100 * df["split"].mean(),
         "merged_per100": 100 * df["merged"].mean(),
