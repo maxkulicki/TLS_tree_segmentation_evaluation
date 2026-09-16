@@ -98,9 +98,9 @@ def cmd_score(a):
     if field is None and not a.all_trees:
         print("                  (no boundary flag in this file; all trees scored)")
     print(f"pred. instances   {s['n_pred_instances']}")
-    print(f"mean IoU          {s['mean_iou_matched']:.3f}   "
+    print(f"mean IoU          {s['mean_iou_all']:.3f}   (all trees, unmatched = 0)")
+    print(f"                  {s['mean_iou_matched']:.3f}   "
           f"({s['n_matched']}/{s['n_trees']} matched trees)")
-    print(f"                  {s['mean_iou_all']:.3f}   (all trees, unmatched = 0)")
     print(f"detection rate    {s['detection_rate']:.3f}   [IoU >= {DETECTION_IOU_THRESHOLD}]")
     print(f"mean precision    {s['mean_precision']:.3f}")
     print(f"mean recall       {s['mean_recall']:.3f}")

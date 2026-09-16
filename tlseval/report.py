@@ -24,12 +24,12 @@ import pandas as pd
 
 from .core import TlsEvalError, read_results
 
-# Metric every analysis is keyed to. Matched-only is the convention behind the
+# Metric every analysis is keyed to. All-trees is the convention behind the
 # published TreeScanPL10K table, so a report keyed to it is directly comparable
 # with the numbers in the README.
-PRIMARY = "mean_iou_matched"
+PRIMARY = "mean_iou_all"
 
-METRICS = ["mean_iou_matched", "mean_iou_all", "detection_rate",
+METRICS = ["mean_iou_all", "mean_iou_matched", "detection_rate",
            "mean_precision", "mean_recall"]
 
 # Plot attributes analysed in the paper, grouped the way the results section
@@ -268,8 +268,53 @@ def extreme_plots(per_plot, n=10, metric=PRIMARY):
                       d.tail(n).iloc[::-1].assign(rank="easiest")])[["rank"] + cols]
 
 
+def holm(pvals):
+    """Holm-Bonferroni step-down adjustment, order preserved.
+
+    Same correction applied to the pairwise comparisons in the paper. NaNs pass
+    through as NaN and are excluded from the family size, so a comparison that
+    could not be tested does not inflate the others.
+    """
+    p = np.asarray(pvals, dtype=float)
+    out = np.full(p.shape, np.nan)
+    ok = np.flatnonzero(~np.isnan(p))
+    if ok.size == 0:
+        return out
+    order = ok[np.argsort(p[ok])]
+    m = ok.size
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, (m - rank) * p[i])
+        out[i] = min(running, 1.0)
+    return out
+
+
+def _paired_test(mine, theirs):
+    """Two-tailed paired Wilcoxon on the plots where both methods have a value.
+
+    Returns (p, n_pairs). p is NaN when the test is undefined: fewer than the
+    handful of pairs the signed-rank test needs, or every paired difference
+    exactly zero (which happens when a method is compared against itself).
+    """
+    from scipy.stats import wilcoxon
+    both = mine.notna() & theirs.notna()
+    a, b = mine[both], theirs[both]
+    if len(a) < 6 or np.allclose(a.values, b.values):
+        return float("nan"), int(len(a))
+    try:
+        return float(wilcoxon(a, b).pvalue), int(len(a))
+    except ValueError:
+        return float("nan"), int(len(a))
+
+
 def compare_published(per_plot, published_path, strip_suffix=None, metric=PRIMARY):
-    """Put your per-plot results next to the six published methods."""
+    """Put your per-plot results next to the six published methods.
+
+    Per-plot values ship for every published method, so the comparison is a
+    paired test over the plots you share with each rather than a difference of
+    two averages. p-values are Holm-Bonferroni adjusted across the comparisons
+    in the table, matching the procedure used in the paper.
+    """
     pub = pd.read_csv(published_path)
     pub["plot"] = _normalise(pub["source_file"])
     mine = per_plot.copy()
@@ -279,12 +324,24 @@ def compare_published(per_plot, published_path, strip_suffix=None, metric=PRIMAR
         return None
     cols = sorted(c for c in pub.columns if c.endswith("_mean_iou"))
     rows = [{"method": "your method", "mean_iou": j[metric].mean(),
-             "n_plots": len(j), "you_win": ""}]
+             "n_plots": len(j), "you_win": "", "p_holm": float("nan"),
+             "verdict": ""}]
     for c in cols:
-        n = int(j[c].notna().sum())
+        p, n = _paired_test(j[metric], j[c])
         rows.append({"method": c[:-len("_mean_iou")], "mean_iou": j[c].mean(),
-                     "n_plots": n, "you_win": f"{int((j[metric] > j[c]).sum())}/{n}"})
-    out = pd.DataFrame(rows).sort_values("mean_iou", ascending=False).reset_index(drop=True)
+                     "n_plots": n, "you_win": f"{int((j[metric] > j[c]).sum())}/{n}",
+                     "p_holm": p, "verdict": ""})
+    out = pd.DataFrame(rows)
+    out["p_holm"] = holm(out["p_holm"])
+    ahead = out["mean_iou"].iloc[0]
+    out["verdict"] = [
+        "" if i == 0 else
+        "untested" if np.isnan(r.p_holm) else
+        "tie" if r.p_holm > 0.05 else
+        ("you win" if ahead > r.mean_iou else "they win")
+        for i, r in enumerate(out.itertuples())
+    ]
+    out = out.sort_values("mean_iou", ascending=False).reset_index(drop=True)
     out.attrs["metric"] = metric
     return out
 
@@ -439,7 +496,7 @@ def make_figures(joined, per_tree, tables, out_dir):
         for i, v in enumerate(order["mean_iou"]):
             ax.text(v + .006, i, f"{v:.3f}", va="center", fontsize=8, color=MUTED)
         ax.set_xlim(0, float(order["mean_iou"].max()) * 1.16)
-        ax.set_xlabel("mean IoU (matched trees)")
+        ax.set_xlabel("mean IoU (all trees, unmatched = 0)")
         ax.set_title("Against the published methods, same plots")
         save(fig, "07_vs_published.png")
 
@@ -495,15 +552,22 @@ def _write_markdown(out, cfg, per_tree, per_plot, tables, figs):
     for m in METRICS:
         if m in per_plot.columns:
             L.append(f"| {m.replace('_', ' ')} | {per_plot[m].mean():.3f} |")
-    L += ["", "`mean iou matched` averages over trees that got a match, the convention "
-          "behind the published table; `mean iou all` counts unmatched trees as zero.", ""]
+    L += ["", "`mean iou all` counts unmatched trees as zero, the convention behind "
+          "the published table; `mean iou matched` averages only over trees that got "
+          "a match.", ""]
 
     if "vs_published" in tables:
         L += ["## Against the published methods", "",
-              "| Method | Mean IoU | Plots you win |", "|---|---|---|"]
+              "| Method | Mean IoU | Plots you win | p (Holm) | |",
+              "|---|---|---|---|---|"]
         for _, r in tables["vs_published"].iterrows():
-            L.append(f"| {r['method']} | {r['mean_iou']:.3f} | {r['you_win']} |")
-        L.append("")
+            p = "" if np.isnan(r["p_holm"]) else f"{r['p_holm']:.2g}"
+            L.append(f"| {r['method']} | {r['mean_iou']:.3f} | {r['you_win']} | "
+                     f"{p} | {r['verdict']} |")
+        L += ["", "Two-tailed paired Wilcoxon signed-rank over the plots you share "
+              "with each method, Holm-Bonferroni adjusted across the table. A tie "
+              "means the plot-level differences are not consistent enough to "
+              "separate the two methods, whatever the gap between their means.", ""]
 
     prof = tables["failure_profile"].iloc[0]
     L += ["## How it fails", "",

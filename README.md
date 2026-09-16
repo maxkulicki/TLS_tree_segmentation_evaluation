@@ -92,8 +92,8 @@ tlseval score merged.laz
 voxel size        0.1 m
 trees evaluated   45   (5 boundary-clipped excluded via 'completelyInside')
 pred. instances   71
-mean IoU          0.512   (43/45 matched trees)
-                  0.489   (all trees, unmatched = 0)
+mean IoU          0.489   (all trees, unmatched = 0)
+                  0.512   (43/45 matched trees)
 detection rate    0.400   [IoU >= 0.5]
 mean precision    0.563
 mean recall       0.690
@@ -152,7 +152,11 @@ You get `summary.md`, a CSV per analysis, and figures:
 - **Accuracy by tree size** — errors concentrate in the small classes, which is
   where an inventory can least absorb them.
 - **Against the published methods** — your per-plot IoU next to all six, on the
-  plots you both cover.
+  plots you both cover, with a two-tailed paired Wilcoxon signed-rank test
+  against each and a Holm–Bonferroni correction across the table. A higher
+  mean is not the same as a win: the test can go against the ranking of the
+  means when one method takes a few plots by a wide margin and loses the rest
+  narrowly.
 
 If your prediction files carry a method suffix (`Plot_A_mymethod.laz`), the join
 to plot attributes fails and tells you what to add:
@@ -171,19 +175,28 @@ check.
 
 ## Published results
 
-The six methods evaluated in the paper, on all 272 plots.
+The six methods evaluated in the paper, on 271 of the 272 plots.
 
 | Method | Type | Mean IoU | Detection | Precision | Recall |
 |---|---|---|---|---|---|
-| ForestFormer3D | Transformer | 0.778 | 0.862 | 0.839 | 0.895 |
-| SegmentAnyTree | Grouping | 0.744 | 0.808 | 0.809 | 0.884 |
-| TreeAIBox | Grouping | 0.719 | 0.807 | 0.791 | 0.892 |
-| TreeLearn | Grouping | 0.719 | 0.776 | 0.789 | 0.875 |
-| treeX | Algorithmic | 0.683 | 0.722 | 0.763 | 0.871 |
-| RayExtract | Algorithmic | 0.626 | 0.709 | 0.792 | 0.753 |
+| ForestFormer3D | Transformer | 0.757 | 0.860 | 0.839 | 0.895 |
+| SegmentAnyTree | Grouping | 0.706 | 0.807 | 0.808 | 0.884 |
+| TreeAIBox | Grouping | 0.697 | 0.807 | 0.790 | 0.891 |
+| TreeLearn | Grouping | 0.675 | 0.776 | 0.788 | 0.875 |
+| RayExtract | Algorithmic | 0.621 | 0.711 | 0.792 | 0.754 |
+| treeX | Algorithmic | 0.601 | 0.688 | 0.740 | 0.860 |
 
-Per-plot values are in `data/treescanpl_published_results.csv` — the file
-`tlseval report --published` compares against.
+Mean IoU is over every evaluated tree with unmatched ones scoring zero
+(`mean_iou_all`), on the 10 cm scoring grid — the convention and the grid
+`tlseval` defaults to, so `tlseval batch` on these predictions returns this
+table. RayExtract returned no segmentation on 3 of the 271 plots; those score 0
+rather than being dropped.
+
+Per-plot values for all six methods are in
+`data/treescanpl_published_results.csv` — the file `tlseval report --published`
+compares against. Because it is per-plot rather than aggregate, a new method can
+be tested against each published method with a paired test over the plots they
+share, not merely compared on means.
 
 Point-level predictions from these six methods are not distributed. This
 repository is for running the evaluation yourself, on your own method, against
@@ -198,19 +211,24 @@ an issue or a pull request with your `summary.csv`.
 one-to-one by the Hungarian algorithm, maximising IoU.
 
 **Mean IoU** is reported two ways, because the choice moves the number by
-0.02–0.08 and the two answer different questions:
+0.01–0.06 and the two answer different questions:
 
-- `mean_iou_matched` — over reference trees that got a match. *How well are
-  found trees delineated?* This is the convention behind the table above, so it
-  is the one that reproduces those numbers.
 - `mean_iou_all` — over every evaluated tree, unmatched ones scoring zero. *How
-  well is the plot segmented?* This is the convention the detection rate uses.
+  well is the plot segmented?* This is the convention behind the table above, so
+  it is the one that reproduces those numbers, and the one the detection rate
+  already uses.
+- `mean_iou_matched` — over reference trees that got a match. *How well are
+  found trees delineated?* On its own it credits a method for the trees it never
+  found: one that returns few but clean instances scores higher here than one
+  that finds everything roughly.
 
 **Detection rate** is the fraction of reference trees whose match reaches
 IoU ≥ 0.5. Counting merely-matched trees instead inflates it badly: Hungarian
 matching pairs a tree with its best available prediction however poor.
 
-**Precision and recall** are point-wise over matched pairs.
+**Precision and recall** are over matched pairs, on the same voxel sets as
+IoU: precision is the share of a prediction's voxels that fall in its matched
+reference tree, recall the share of that tree's voxels the prediction covers.
 
 ### Failure taxonomy
 
@@ -257,7 +275,7 @@ As a library:
 ```python
 from tlseval import evaluate, summarise
 df = evaluate("plot.laz")               # one row per reference tree
-print(summarise(df)["mean_iou_matched"])
+print(summarise(df)["mean_iou_all"])
 
 from tlseval import read_results
 df, config = read_results("results.csv")  # settings come back with the data
