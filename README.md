@@ -1,9 +1,10 @@
 # TLS Tree Segmentation Evaluation
 
-This repository provides the evaluation code for the **TreeScanPL10K**
-benchmark of individual-tree segmentation from terrestrial laser scanning
-data. It computes segmentation metrics, Missed/Split/Merged error frequencies,
-and performance analyses across forest conditions.
+This repository accompanies the paper **“Individual Tree Segmentation from
+Terrestrial LiDAR: Benchmarking and Forest Structural Analysis.”** It provides
+the evaluation code for the **TreeScanPL10K** benchmark and computes
+segmentation metrics, Missed/Split/Merged error frequencies, and performance
+analyses across forest conditions.
 
 ## Installation
 
@@ -102,9 +103,12 @@ The attributes and published-results files are included in this repository.
 If prediction filenames contain a method-specific suffix, remove it during
 matching with `--strip-suffix`.
 
+See the [visualization guide](docs/visualization_guide.md) for examples and a
+short explanation of each report figure.
+
 ## Published results
 
-The paper evaluates six methods on 271 of the 272 plots.
+The paper evaluates six individual-tree segmentation methods.
 
 | Method | Type | Mean IoU | Detection | Precision | Recall |
 |---|---|---|---|---|---|
