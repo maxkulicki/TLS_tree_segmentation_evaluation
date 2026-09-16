@@ -62,30 +62,28 @@ def published(tmp_path):
     return path, base
 
 
-def test_paired_test_can_overturn_the_ranking_of_means(published):
+def test_comparison_reports_means_plot_wins_and_adjusted_p_values(published):
     path, base = published
     # "Your method" is `steady` replayed through the comparison.
     mine = pd.DataFrame({"plot": [f"Plot_{i:02d}.laz" for i in range(len(base))],
                          PRIMARY: base + 0.02})
     out = compare_published(mine, path).set_index("method")
 
-    # erratic's mean is the higher of the two, so it sorts above you ...
+    # erratic's mean is higher because of one large outlier ...
     assert out.loc["erratic", "mean_iou"] > out.loc["your method", "mean_iou"]
-    # ... but you beat it on 39 of the 40 plots, and the test says so.
+    # ... although your method is higher on 39 of the 40 shared plots.
     assert out.loc["erratic", "you_win"] == "39/40"
     assert out.loc["erratic", "p_holm"] < 0.05
-    assert out.loc["erratic", "verdict"] == "they win"
+    assert "verdict" not in out.columns
 
 
-def test_identical_method_is_untested_not_a_tie(published):
+def test_identical_method_has_undefined_p_value(published):
     path, base = published
     mine = pd.DataFrame({"plot": [f"Plot_{i:02d}.laz" for i in range(len(base))],
                          PRIMARY: base + 0.02})
     out = compare_published(mine, path).set_index("method")
     # Every paired difference against `steady` is exactly zero. The signed-rank
-    # test is undefined there; reporting it as a tie would claim evidence of
-    # equivalence that was never computed.
-    assert out.loc["steady", "verdict"] == "untested"
+    # test is undefined there.
     assert np.isnan(out.loc["steady", "p_holm"])
 
 

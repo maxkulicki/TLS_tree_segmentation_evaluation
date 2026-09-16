@@ -55,8 +55,6 @@ def build_parser():
     t.add_argument("--output", "-o", required=True)
     t.add_argument("--pred-field", default=DEFAULTS["pred_field"])
     t.add_argument("--tolerance", type=float, default=0.05)
-    t.add_argument("--dry-run", action="store_true",
-                   help="report coverage without writing")
 
     r = sub.add_parser("report", help="full analysis of a batch run")
     r.add_argument("results", help="directory written by `tlseval batch`")
@@ -136,8 +134,6 @@ def cmd_transfer(a):
         print("\nwarning: under half the reference points received a label. Usually the\n"
               "         tolerance is too tight for the prediction's resolution -- compare\n"
               "         it against the p95 nearest-neighbour distance above.", file=sys.stderr)
-    if a.dry_run:
-        return 0
     out = transfer_labels(a.prediction, a.reference, a.pred_field, a.output, a.tolerance)
     print(f"\nwritten to {out}")
     return 0
