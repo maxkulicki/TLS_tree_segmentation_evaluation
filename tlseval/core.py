@@ -342,16 +342,19 @@ def summarise(df: "pd.DataFrame") -> dict:
     """Plot-level summary of a per-tree results table.
 
     Mean IoU is reported two ways because the choice changes the number by
-    0.02-0.08 and the two are not interchangeable:
-
-      mean_iou_matched  averages over reference trees that got a match.
-                        "How well are found trees delineated?" This is the
-                        convention behind the published TreeScanPL10K table,
-                        so it is what reproduces those numbers.
+    0.01-0.06 and the two are not interchangeable:
 
       mean_iou_all      averages over every evaluated tree, unmatched ones
                         contributing zero. "How well is the plot segmented?"
-                        This is the convention the detection rate already uses.
+                        This is the convention behind the published
+                        TreeScanPL10K table, so it is what reproduces those
+                        numbers, and the one the detection rate already uses.
+
+      mean_iou_matched  averages over reference trees that got a match.
+                        "How well are found trees delineated?" Read on its own
+                        it credits a method for the trees it never found: a
+                        method that returns few but clean instances scores
+                        higher here than one that finds everything roughly.
 
     Precision and recall are over matched pairs, matching how they are defined.
     """

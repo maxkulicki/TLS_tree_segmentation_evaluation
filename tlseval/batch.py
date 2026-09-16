@@ -164,8 +164,8 @@ def run(
         "n_trees": len(per_tree),
         # Plot-level means: each plot weighs the same regardless of tree count,
         # which is what the paper reports. Tree-level means are also given.
-        # Matched-only is the convention behind the published table, so it is
-        # the one that reproduces those numbers; all-trees is reported beside it.
+        # All-trees is the convention behind the published table, so it is the
+        # one that reproduces those numbers; matched-only is reported beside it.
         "mean_iou_matched": per_plot["mean_iou_matched"].mean(),
         "mean_iou_all": per_plot["mean_iou_all"].mean(),
         "detection_rate": per_plot["detection_rate"].mean(),
@@ -199,9 +199,9 @@ def _print_summary(row, bad, out, config):
     print(f"plots scored    {int(row['n_plots'])}"
           + (f"   ({len(bad)} failed)" if bad else ""))
     print(f"trees scored    {int(row['n_trees'])}")
-    print(f"mean IoU        {row['mean_iou_matched']:.3f}   (matched trees "
+    print(f"mean IoU        {row['mean_iou_all']:.3f}   (all trees, unmatched = 0 "
           f"- comparable with the published table)")
-    print(f"                {row['mean_iou_all']:.3f}   (all trees, unmatched = 0)")
+    print(f"                {row['mean_iou_matched']:.3f}   (matched trees only)")
     print(f"detection rate  {row['detection_rate']:.3f}")
     print(f"precision       {row['mean_precision']:.3f}")
     print(f"recall          {row['mean_recall']:.3f}")
