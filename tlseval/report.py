@@ -324,23 +324,14 @@ def compare_published(per_plot, published_path, strip_suffix=None, metric=PRIMAR
         return None
     cols = sorted(c for c in pub.columns if c.endswith("_mean_iou"))
     rows = [{"method": "your method", "mean_iou": j[metric].mean(),
-             "n_plots": len(j), "you_win": "", "p_holm": float("nan"),
-             "verdict": ""}]
+             "n_plots": len(j), "you_win": "", "p_holm": float("nan")}]
     for c in cols:
         p, n = _paired_test(j[metric], j[c])
         rows.append({"method": c[:-len("_mean_iou")], "mean_iou": j[c].mean(),
                      "n_plots": n, "you_win": f"{int((j[metric] > j[c]).sum())}/{n}",
-                     "p_holm": p, "verdict": ""})
+                     "p_holm": p})
     out = pd.DataFrame(rows)
     out["p_holm"] = holm(out["p_holm"])
-    ahead = out["mean_iou"].iloc[0]
-    out["verdict"] = [
-        "" if i == 0 else
-        "untested" if np.isnan(r.p_holm) else
-        "tie" if r.p_holm > 0.05 else
-        ("you win" if ahead > r.mean_iou else "they win")
-        for i, r in enumerate(out.itertuples())
-    ]
     out = out.sort_values("mean_iou", ascending=False).reset_index(drop=True)
     out.attrs["metric"] = metric
     return out
@@ -558,16 +549,14 @@ def _write_markdown(out, cfg, per_tree, per_plot, tables, figs):
 
     if "vs_published" in tables:
         L += ["## Against the published methods", "",
-              "| Method | Mean IoU | Plots you win | p (Holm) | |",
-              "|---|---|---|---|---|"]
+              "| Method | Mean IoU | Plots you win | p (Holm) |",
+              "|---|---|---|---|"]
         for _, r in tables["vs_published"].iterrows():
             p = "" if np.isnan(r["p_holm"]) else f"{r['p_holm']:.2g}"
             L.append(f"| {r['method']} | {r['mean_iou']:.3f} | {r['you_win']} | "
-                     f"{p} | {r['verdict']} |")
+                     f"{p} |")
         L += ["", "Two-tailed paired Wilcoxon signed-rank over the plots you share "
-              "with each method, Holm-Bonferroni adjusted across the table. A tie "
-              "means the plot-level differences are not consistent enough to "
-              "separate the two methods, whatever the gap between their means.", ""]
+              "with each method, Holm-Bonferroni adjusted across the table.", ""]
 
     prof = tables["failure_profile"].iloc[0]
     L += ["## How it fails", "",
