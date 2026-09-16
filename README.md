@@ -41,11 +41,10 @@ points. If a method filters, downsamples, or reorders the point cloud, use
 `tlseval transfer` to map its predictions to the reference points:
 
 ```bash
-tlseval transfer prediction.laz reference.laz -o merged.laz --dry-run
 tlseval transfer prediction.laz reference.laz -o merged.laz
 ```
 
-The dry run reports the proportion of reference points assigned a predicted
+The command reports the proportion of reference points assigned a predicted
 label and the nearest-neighbor distances used for the transfer.
 
 ## Evaluate
